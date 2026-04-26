@@ -115,7 +115,7 @@ class HtmlGraphExporter:
     button {{ padding: 6px 16px; cursor: pointer; background: #2563eb; color: white; border: none; border-radius: 6px; font-weight: 500; transition: background 0.2s; }}
     button:hover {{ background: #1d4ed8; }}
     .swatch {{ display: inline-block; width: 14px; height: 14px; border-radius: 3px; }}
-    #graph {{ flex: 1; width: 100vw; }}
+    #graph {{ width: 100vw; height: calc(100vh - 65px); }}
   </style>
 </head>
 <body>
@@ -142,8 +142,8 @@ class HtmlGraphExporter:
   </div>
   <div id="graph"></div>
   <script>
-    const rawNodes = new vis.DataSet({json.dumps(vis_nodes)});
-    const rawEdges = new vis.DataSet({json.dumps(vis_edges)});
+    const rawNodes = {json.dumps(vis_nodes)};
+    const rawEdges = {json.dumps(vis_edges)};
     
     let showL0 = false;
     let showL1 = true;
@@ -154,40 +154,45 @@ class HtmlGraphExporter:
     let focusNodeId = null;
     let focusConnectedNodeIds = new Set();
     
-    const nodesView = new vis.DataView(rawNodes, {{
-      filter: function (item) {{
+    function filterData() {{
+      const filteredNodes = rawNodes.filter(item => {{
         if (item.layer === "L0" && !showL0) return false;
         if (item.layer === "L1" && !showL1) return false;
         if (item.layer === "L2" && !showL2) return false;
         if (item.layer === "L3" && !showL3) return false;
         
-        if (filterKind && item.kind && item.kind !== filterKind) return false;
+        if (filterKind !== "" && item.kind !== filterKind) return false;
         
-        if (searchQuery && !item.label.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+        if (searchQuery !== "" && !item.label.toLowerCase().includes(searchQuery.toLowerCase())) return false;
         
         if (focusNodeId !== null) {{
           if (item.id !== focusNodeId && !focusConnectedNodeIds.has(item.id)) return false;
         }}
         return true;
-      }}
-    }});
-
-    const edgesView = new vis.DataView(rawEdges, {{
-      filter: function (item) {{
+      }});
+      
+      const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
+      
+      const filteredEdges = rawEdges.filter(item => {{
+        if (!filteredNodeIds.has(item.from) || !filteredNodeIds.has(item.to)) return false;
         if (focusNodeId !== null) {{
           if (item.from !== focusNodeId && item.to !== focusNodeId) return false;
         }}
         return true;
-      }}
-    }});
+      }});
+      
+      return {{
+        nodes: new vis.DataSet(filteredNodes),
+        edges: new vis.DataSet(filteredEdges)
+      }};
+    }}
 
     const container = document.getElementById("graph");
-    const data = {{ nodes: nodesView, edges: edgesView }};
     const options = {{
       nodes: {{ shape: "dot", font: {{ size: 14 }} }},
       edges: {{ font: {{ size: 10, align: "middle" }}, smooth: false, color: {{ opacity: 0.5 }} }},
       physics: {{ 
-        enabled: true, 
+        enabled: true,
         solver: 'forceAtlas2Based',
         forceAtlas2Based: {{ gravitationalConstant: -50, centralGravity: 0.01, springLength: 100, damping: 0.4 }},
         stabilization: {{ iterations: 50 }}
@@ -195,37 +200,39 @@ class HtmlGraphExporter:
       layout: {{ improvedLayout: false }}
     }};
     
-    const network = new vis.Network(container, data, options);
+    let network = new vis.Network(container, filterData(), options);
+
+    function updateNetwork() {{
+      network.setData(filterData());
+    }}
 
     // Focus mode
     network.on("click", function (params) {{
       if (params.nodes.length > 0) {{
         focusNodeId = params.nodes[0];
         focusConnectedNodeIds = new Set(network.getConnectedNodes(focusNodeId));
-        nodesView.refresh();
-        edgesView.refresh();
+        updateNetwork();
       }} else {{
         focusNodeId = null;
         focusConnectedNodeIds.clear();
-        nodesView.refresh();
-        edgesView.refresh();
+        updateNetwork();
       }}
     }});
 
     // Controls
-    document.getElementById("show-l0").addEventListener("change", (e) => {{ showL0 = e.target.checked; nodesView.refresh(); }});
-    document.getElementById("show-l1").addEventListener("change", (e) => {{ showL1 = e.target.checked; nodesView.refresh(); }});
-    document.getElementById("show-l2").addEventListener("change", (e) => {{ showL2 = e.target.checked; nodesView.refresh(); }});
-    document.getElementById("show-l3").addEventListener("change", (e) => {{ showL3 = e.target.checked; nodesView.refresh(); }});
+    document.getElementById("show-l0").addEventListener("change", (e) => {{ showL0 = e.target.checked; updateNetwork(); }});
+    document.getElementById("show-l1").addEventListener("change", (e) => {{ showL1 = e.target.checked; updateNetwork(); }});
+    document.getElementById("show-l2").addEventListener("change", (e) => {{ showL2 = e.target.checked; updateNetwork(); }});
+    document.getElementById("show-l3").addEventListener("change", (e) => {{ showL3 = e.target.checked; updateNetwork(); }});
     
     document.getElementById("filter-kind").addEventListener("change", (e) => {{
       filterKind = e.target.value;
-      nodesView.refresh();
+      updateNetwork();
     }});
     
     document.getElementById("search").addEventListener("input", (e) => {{
       searchQuery = e.target.value;
-      nodesView.refresh();
+      updateNetwork();
     }});
     
     document.getElementById("reset-focus").addEventListener("click", () => {{
@@ -235,8 +242,7 @@ class HtmlGraphExporter:
       filterKind = "";
       document.getElementById("search").value = "";
       document.getElementById("filter-kind").value = "";
-      nodesView.refresh();
-      edgesView.refresh();
+      updateNetwork();
       network.fit();
     }});
   </script>
