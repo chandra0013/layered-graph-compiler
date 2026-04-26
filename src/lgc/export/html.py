@@ -193,24 +193,35 @@ class HtmlGraphExporter:
       }});
 
       // 2. Place L2 in circle around center
-      const radiusL2 = 300;
+      const radiusL2 = 250;
       L2.forEach((node, i) => {{
         const angle = (2 * Math.PI * i) / Math.max(1, L2.length);
         node.x = radiusL2 * Math.cos(angle);
         node.y = radiusL2 * Math.sin(angle);
       }});
 
-      // 3. Place L1 around their nearest L2 parent
-      const radiusL1 = 120;
-      L1.forEach((node) => {{
-        const parentEdge = edgesArray.find(e => e.to === node.id && e.fromLayer === "L2");
-        if (parentEdge) {{
-          const parent = nodesArray.find(n => n.id === parentEdge.from);
-          if (parent && parent.x !== undefined) {{
-            const angle = Math.random() * 2 * Math.PI;
-            node.x = parent.x + radiusL1 * Math.cos(angle);
-            node.y = parent.y + radiusL1 * Math.sin(angle);
-          }}
+      // 3. Place L1 uniformly around their nearest L2 parent
+      const childrenMap = {{}};
+      edgesArray.forEach(edge => {{
+        if (edge.fromLayer === "L2" && edge.toLayer === "L1") {{
+          if (!childrenMap[edge.from]) childrenMap[edge.from] = [];
+          childrenMap[edge.from].push(edge.to);
+        }}
+      }});
+      
+      const radiusL1 = 100;
+      Object.keys(childrenMap).forEach(parentId => {{
+        const childrenIds = childrenMap[parentId];
+        const parent = nodesArray.find(n => n.id === parentId);
+        if (parent && parent.x !== undefined) {{
+          childrenIds.forEach((childId, i) => {{
+            const angle = (2 * Math.PI * i) / childrenIds.length;
+            const child = nodesArray.find(n => n.id === childId);
+            if (child) {{
+              child.x = parent.x + radiusL1 * Math.cos(angle);
+              child.y = parent.y + radiusL1 * Math.sin(angle);
+            }}
+          }});
         }}
       }});
     }}
@@ -227,28 +238,41 @@ class HtmlGraphExporter:
     let focusConnectedNodeIds = new Set();
     
     function filterData() {{
-      const filteredNodes = rawNodes.filter(item => {{
-        if (item.layer === "L0" && !showL0) return false;
-        if (item.layer === "L1" && !showL1) return false;
-        if (item.layer === "L2" && !showL2) return false;
-        if (item.layer === "L3" && !showL3) return false;
+      const filteredNodes = [];
+      for (const item of rawNodes) {{
+        if (item.layer === "L0" && !showL0) continue;
+        if (item.layer === "L1" && !showL1) continue;
+        if (item.layer === "L2" && !showL2) continue;
+        if (item.layer === "L3" && !showL3) continue;
         
-        if (filterKind !== "" && item.kind !== filterKind) return false;
+        if (filterKind !== "" && item.kind !== filterKind) continue;
+        if (searchQuery !== "" && !item.label.toLowerCase().includes(searchQuery.toLowerCase())) continue;
         
-        if (searchQuery !== "" && !item.label.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+        let formattedNode = {{...item}};
         
         if (focusNodeId !== null) {{
-          if (item.id !== focusNodeId && !focusConnectedNodeIds.has(item.id)) return false;
+          if (item.id !== focusNodeId && !focusConnectedNodeIds.has(item.id)) {{
+            formattedNode.opacity = 0.15;
+            formattedNode.font = {{ color: "rgba(100,100,100,0.3)" }};
+          }} else {{
+            formattedNode.opacity = 1.0;
+            formattedNode.font = {{ color: "#111827", size: 16, strokeWidth: 2, strokeColor: "#ffffff" }};
+            formattedNode.borderWidth = (item.id === focusNodeId) ? 3 : 1;
+          }}
+        }} else {{
+          formattedNode.opacity = 1.0;
+          formattedNode.font = {{ color: "#111827" }};
+          formattedNode.borderWidth = 1;
         }}
-        return true;
-      }});
+        
+        filteredNodes.push(formattedNode);
+      }}
       
       const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
       
       const filteredEdges = [];
       for (const item of rawEdges) {{
         if (!filteredNodeIds.has(item.from) || !filteredNodeIds.has(item.to)) continue;
-        if (focusNodeId !== null && item.from !== focusNodeId && item.to !== focusNodeId) continue;
         
         let formattedEdge = {{...item}};
         
@@ -269,6 +293,16 @@ class HtmlGraphExporter:
           formattedEdge.color = {{ color: "#c8c8c8", opacity: 0.4 }};
         }}
         
+        // Fade non-focused edges
+        if (focusNodeId !== null) {{
+          if (item.from !== focusNodeId && item.to !== focusNodeId) {{
+            formattedEdge.color.opacity = 0.05;
+          }} else {{
+            formattedEdge.color.opacity = 1.0;
+            formattedEdge.width += 1;
+          }}
+        }}
+        
         filteredEdges.push(formattedEdge);
       }}
       
@@ -286,7 +320,7 @@ class HtmlGraphExporter:
       physics: {{ 
         enabled: true,
         solver: "forceAtlas2Based",
-        forceAtlas2Based: {{ gravitationalConstant: -30, centralGravity: 0.005, springLength: 120, springConstant: 0.05, damping: 0.4 }},
+        forceAtlas2Based: {{ gravitationalConstant: -40, centralGravity: 0.002, springLength: 120, springConstant: 0.04, damping: 0.4 }},
         stabilization: {{ iterations: 100 }}
       }},
       layout: {{ improvedLayout: false }}
