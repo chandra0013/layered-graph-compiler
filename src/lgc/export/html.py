@@ -139,7 +139,7 @@ class HtmlGraphExporter:
   <title>Layered Graph Compiler</title>
   <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
   <style>
-    body {{ margin: 0; font-family: Segoe UI, sans-serif; background: #f8fafc; color: #111827; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }}
+    body {{ margin: 0; font-family: Segoe UI, sans-serif; background-color: #f8fafc; background-image: radial-gradient(circle, #e2e8f0 1px, transparent 1px); background-size: 30px 30px; color: #111827; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }}
     .controls {{ padding: 12px 24px; background: white; border-bottom: 1px solid #d1d5db; display: flex; gap: 24px; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); z-index: 10; }}
     .controls label {{ font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-weight: 500; }}
     .controls-group {{ display: flex; gap: 16px; align-items: center; border-right: 1px solid #e5e7eb; padding-right: 24px; }}
@@ -185,22 +185,6 @@ class HtmlGraphExporter:
       const L2 = nodesArray.filter(n => n.layer === "L2");
       const L1 = nodesArray.filter(n => n.layer === "L1");
 
-      // 1. Center L3
-      L3.forEach((node) => {{
-        node.x = 0;
-        node.y = 0;
-        node.fixed = true;
-      }});
-
-      // 2. Place L2 in circle around center
-      const radiusL2 = 250;
-      L2.forEach((node, i) => {{
-        const angle = (2 * Math.PI * i) / Math.max(1, L2.length);
-        node.x = radiusL2 * Math.cos(angle);
-        node.y = radiusL2 * Math.sin(angle);
-      }});
-
-      // 3. Place L1 uniformly around their nearest L2 parent
       const childrenMap = {{}};
       edgesArray.forEach(edge => {{
         if (edge.fromLayer === "L2" && edge.toLayer === "L1") {{
@@ -208,7 +192,29 @@ class HtmlGraphExporter:
           childrenMap[edge.from].push(edge.to);
         }}
       }});
-      
+
+      // 1. Center L3
+      L3.forEach((node) => {{
+        node.x = 0;
+        node.y = 0;
+        node.fixed = true;
+      }});
+
+      // 2. Place L2 in circle around center scaled by cluster size
+      const baseRadius = 250;
+      const rotationOffset = Math.PI / 6;
+      L2.forEach((node, i) => {{
+        const clusterSize = childrenMap[node.id] ? childrenMap[node.id].length : 1;
+        const adjustedRadius = baseRadius + Math.sqrt(clusterSize) * 15;
+        const angle = (2 * Math.PI * i) / Math.max(1, L2.length) + rotationOffset;
+        node.x = adjustedRadius * Math.cos(angle);
+        node.y = adjustedRadius * Math.sin(angle);
+        
+        // Scale L2 node size visually
+        node.size = 15 + Math.sqrt(clusterSize) * 2;
+      }});
+
+      // 3. Place L1 uniformly around their nearest L2 parent
       const radiusL1 = 100;
       Object.keys(childrenMap).forEach(parentId => {{
         const childrenIds = childrenMap[parentId];
@@ -286,8 +292,8 @@ class HtmlGraphExporter:
           formattedEdge.width = 2;
           formattedEdge.color = {{ color: "#666666", opacity: 0.8 }};
         }} else if (item.fromLayer === "L3" || item.toLayer === "L3") {{
-          formattedEdge.width = 3;
-          formattedEdge.color = {{ color: "#333333", opacity: 1.0 }};
+          formattedEdge.width = 4;
+          formattedEdge.color = {{ color: "#222222", opacity: 1.0 }};
         }} else {{
           formattedEdge.width = 1;
           formattedEdge.color = {{ color: "#c8c8c8", opacity: 0.4 }};
@@ -333,6 +339,9 @@ class HtmlGraphExporter:
     }}
 
     network.once("stabilizationIterationsDone", function() {{
+      // Stop spinning after layout settles
+      network.setOptions({{ physics: false }});
+      
       const l3Node = rawNodes.find(n => n.layer === "L3");
       if (l3Node) {{
         network.focus(l3Node.id, {{ scale: 1.2, animation: true }});
