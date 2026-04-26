@@ -89,6 +89,8 @@ class HtmlGraphExporter:
             "from": edge.get("source_id"),
             "to": edge.get("target_id"),
             "label": edge.get("kind", ""),
+            "layer": edge.get("layer", "L0"),
+            "kind": edge.get("kind", ""),
             "arrows": "to",
         }
 
@@ -100,6 +102,28 @@ class HtmlGraphExporter:
             for edge in edges
             if edge.get("source_id") in node_ids and edge.get("target_id") in node_ids
         ]
+        
+        # Inject hierarchy edges for L1->L0, L2->L1, L3->L2
+        for node in nodes:
+            parent_id = node["id"]
+            if parent_id not in node_ids:
+                continue
+            parent_layer = str(node.get("layer", "L0"))
+            if parent_layer == "L0":
+                continue
+                
+            for child_id in node.get("support_node_ids", []):
+                if child_id in node_ids:
+                    vis_edges.append({
+                        "id": f"{parent_id}_hierarchy_{child_id}",
+                        "from": parent_id,
+                        "to": child_id,
+                        "label": "contains",
+                        "layer": parent_layer,
+                        "kind": "hierarchy",
+                        "arrows": "to",
+                    })
+
         return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -173,13 +197,26 @@ class HtmlGraphExporter:
       
       const filteredNodeIds = new Set(filteredNodes.map(n => n.id));
       
-      const filteredEdges = rawEdges.filter(item => {{
-        if (!filteredNodeIds.has(item.from) || !filteredNodeIds.has(item.to)) return false;
-        if (focusNodeId !== null) {{
-          if (item.from !== focusNodeId && item.to !== focusNodeId) return false;
+      const filteredEdges = [];
+      for (const item of rawEdges) {{
+        if (!filteredNodeIds.has(item.from) || !filteredNodeIds.has(item.to)) continue;
+        if (focusNodeId !== null && item.from !== focusNodeId && item.to !== focusNodeId) continue;
+        
+        // Edge styling
+        let formattedEdge = {{...item}};
+        if (item.kind === "hierarchy") {{
+          formattedEdge.width = 2;
+          formattedEdge.color = {{ color: "#555555", opacity: 0.8 }};
+        }} else if (item.layer === "L0") {{
+          formattedEdge.width = 1;
+          formattedEdge.color = {{ color: "#c8c8c8", opacity: 0.15 }};
+        }} else {{
+          formattedEdge.width = 1;
+          formattedEdge.color = {{ color: "#646464", opacity: 0.5 }};
         }}
-        return true;
-      }});
+        
+        filteredEdges.push(formattedEdge);
+      }}
       
       return {{
         nodes: new vis.DataSet(filteredNodes),
@@ -190,12 +227,12 @@ class HtmlGraphExporter:
     const container = document.getElementById("graph");
     const options = {{
       nodes: {{ shape: "dot", font: {{ size: 14 }} }},
-      edges: {{ font: {{ size: 10, align: "middle" }}, smooth: false, color: {{ opacity: 0.5 }} }},
+      edges: {{ font: {{ size: 10, align: "middle" }}, smooth: false }},
       physics: {{ 
         enabled: true,
         solver: 'forceAtlas2Based',
-        forceAtlas2Based: {{ gravitationalConstant: -50, centralGravity: 0.01, springLength: 100, damping: 0.4 }},
-        stabilization: {{ iterations: 50 }}
+        forceAtlas2Based: {{ gravitationalConstant: -50, centralGravity: 0.01, springLength: 200, springConstant: 0.08, damping: 0.4 }},
+        stabilization: {{ iterations: 150 }}
       }},
       layout: {{ improvedLayout: false }}
     }};
