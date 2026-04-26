@@ -100,8 +100,9 @@ class HtmlGraphExporter:
     const edges = new vis.DataSet({json.dumps(vis_edges)});
     new vis.Network(document.getElementById("graph"), {{ nodes, edges }}, {{
       nodes: {{ shape: "dot", size: 12, font: {{ size: 14 }} }},
-      edges: {{ font: {{ size: 10, align: "middle" }}, smooth: true }},
-      physics: {{ stabilization: true }}
+      edges: {{ font: {{ size: 10, align: "middle" }}, smooth: false }},
+      physics: {{ enabled: true, stabilization: false }},
+      layout: {{ improvedLayout: false }}
     }});
   </script>
 </body>
