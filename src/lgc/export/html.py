@@ -83,22 +83,28 @@ class HtmlGraphExporter:
             "mass": mass,
         }
 
-    def _edge_to_vis(self, edge: dict) -> dict:
+    def _edge_to_vis(self, edge: dict, node_layers: dict) -> dict:
+        source_id = edge.get("source_id")
+        target_id = edge.get("target_id")
         return {
             "id": edge.get("id"),
-            "from": edge.get("source_id"),
-            "to": edge.get("target_id"),
+            "from": source_id,
+            "to": target_id,
             "label": edge.get("kind", ""),
             "layer": edge.get("layer", "L0"),
             "kind": edge.get("kind", ""),
+            "fromLayer": node_layers.get(source_id, "L0"),
+            "toLayer": node_layers.get(target_id, "L0"),
             "arrows": "to",
         }
 
     def _render_html(self, nodes: list[dict], edges: list[dict]) -> str:
+        import math
         vis_nodes = [self._node_to_vis(node) for node in nodes]
         node_ids = {node["id"] for node in vis_nodes}
+        node_layers = {node["id"]: node["layer"] for node in vis_nodes}
         vis_edges = [
-            self._edge_to_vis(edge)
+            self._edge_to_vis(edge, node_layers)
             for edge in edges
             if edge.get("source_id") in node_ids and edge.get("target_id") in node_ids
         ]
@@ -120,6 +126,8 @@ class HtmlGraphExporter:
                         "to": child_id,
                         "label": "contains",
                         "layer": parent_layer,
+                        "fromLayer": parent_layer,
+                        "toLayer": node_layers.get(child_id, "L0"),
                         "kind": "hierarchy",
                         "arrows": "to",
                     })
@@ -135,9 +143,11 @@ class HtmlGraphExporter:
     .controls {{ padding: 12px 24px; background: white; border-bottom: 1px solid #d1d5db; display: flex; gap: 24px; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); z-index: 10; }}
     .controls label {{ font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-weight: 500; }}
     .controls-group {{ display: flex; gap: 16px; align-items: center; border-right: 1px solid #e5e7eb; padding-right: 24px; }}
-    input[type=text] {{ padding: 6px 12px; border: 1px solid #d1d5db; border-radius: 6px; width: 250px; font-size: 14px; }}
+    input[type=text] {{ padding: 6px 12px; border: 1px solid #d1d5db; border-radius: 6px; width: 200px; font-size: 14px; }}
     button {{ padding: 6px 16px; cursor: pointer; background: #2563eb; color: white; border: none; border-radius: 6px; font-weight: 500; transition: background 0.2s; }}
     button:hover {{ background: #1d4ed8; }}
+    #arch-mode {{ background: #f97316; }}
+    #arch-mode:hover {{ background: #ea580c; }}
     .swatch {{ display: inline-block; width: 14px; height: 14px; border-radius: 3px; }}
     #graph {{ width: 100vw; height: calc(100vh - 65px); }}
   </style>
@@ -162,12 +172,50 @@ class HtmlGraphExporter:
     <div class="controls-group" style="border: none;">
       <input type="text" id="search" placeholder="Search nodes...">
       <button id="reset-focus">Reset View</button>
+      <button id="arch-mode">Architecture View</button>
     </div>
   </div>
   <div id="graph"></div>
   <script>
     const rawNodes = {json.dumps(vis_nodes)};
     const rawEdges = {json.dumps(vis_edges)};
+    
+    function assignHierarchicalPositions(nodesArray, edgesArray) {{
+      const L3 = nodesArray.filter(n => n.layer === "L3");
+      const L2 = nodesArray.filter(n => n.layer === "L2");
+      const L1 = nodesArray.filter(n => n.layer === "L1");
+
+      // 1. Center L3
+      L3.forEach((node) => {{
+        node.x = 0;
+        node.y = 0;
+        node.fixed = true;
+      }});
+
+      // 2. Place L2 in circle around center
+      const radiusL2 = 300;
+      L2.forEach((node, i) => {{
+        const angle = (2 * Math.PI * i) / Math.max(1, L2.length);
+        node.x = radiusL2 * Math.cos(angle);
+        node.y = radiusL2 * Math.sin(angle);
+      }});
+
+      // 3. Place L1 around their nearest L2 parent
+      const radiusL1 = 120;
+      L1.forEach((node) => {{
+        const parentEdge = edgesArray.find(e => e.to === node.id && e.fromLayer === "L2");
+        if (parentEdge) {{
+          const parent = nodesArray.find(n => n.id === parentEdge.from);
+          if (parent && parent.x !== undefined) {{
+            const angle = Math.random() * 2 * Math.PI;
+            node.x = parent.x + radiusL1 * Math.cos(angle);
+            node.y = parent.y + radiusL1 * Math.sin(angle);
+          }}
+        }}
+      }});
+    }}
+    
+    assignHierarchicalPositions(rawNodes, rawEdges);
     
     let showL0 = false;
     let showL1 = true;
@@ -202,17 +250,23 @@ class HtmlGraphExporter:
         if (!filteredNodeIds.has(item.from) || !filteredNodeIds.has(item.to)) continue;
         if (focusNodeId !== null && item.from !== focusNodeId && item.to !== focusNodeId) continue;
         
-        // Edge styling
         let formattedEdge = {{...item}};
-        if (item.kind === "hierarchy") {{
+        
+        // Hide L0 internal noise explicitly
+        if (item.layer === "L0" && item.kind !== "hierarchy") {{
+          formattedEdge.hidden = true;
+        }}
+        
+        // Style hierarchy connections
+        if (item.fromLayer === "L2" || item.toLayer === "L2") {{
           formattedEdge.width = 2;
-          formattedEdge.color = {{ color: "#555555", opacity: 0.8 }};
-        }} else if (item.layer === "L0") {{
-          formattedEdge.width = 1;
-          formattedEdge.color = {{ color: "#c8c8c8", opacity: 0.15 }};
+          formattedEdge.color = {{ color: "#666666", opacity: 0.8 }};
+        }} else if (item.fromLayer === "L3" || item.toLayer === "L3") {{
+          formattedEdge.width = 3;
+          formattedEdge.color = {{ color: "#333333", opacity: 1.0 }};
         }} else {{
           formattedEdge.width = 1;
-          formattedEdge.color = {{ color: "#646464", opacity: 0.5 }};
+          formattedEdge.color = {{ color: "#c8c8c8", opacity: 0.4 }};
         }}
         
         filteredEdges.push(formattedEdge);
@@ -228,11 +282,12 @@ class HtmlGraphExporter:
     const options = {{
       nodes: {{ shape: "dot", font: {{ size: 14 }} }},
       edges: {{ font: {{ size: 10, align: "middle" }}, smooth: false }},
+      interaction: {{ hover: true, tooltipDelay: 100 }},
       physics: {{ 
         enabled: true,
-        solver: 'forceAtlas2Based',
-        forceAtlas2Based: {{ gravitationalConstant: -50, centralGravity: 0.01, springLength: 200, springConstant: 0.08, damping: 0.4 }},
-        stabilization: {{ iterations: 150 }}
+        solver: "forceAtlas2Based",
+        forceAtlas2Based: {{ gravitationalConstant: -30, centralGravity: 0.005, springLength: 120, springConstant: 0.05, damping: 0.4 }},
+        stabilization: {{ iterations: 100 }}
       }},
       layout: {{ improvedLayout: false }}
     }};
@@ -242,6 +297,13 @@ class HtmlGraphExporter:
     function updateNetwork() {{
       network.setData(filterData());
     }}
+
+    network.once("stabilizationIterationsDone", function() {{
+      const l3Node = rawNodes.find(n => n.layer === "L3");
+      if (l3Node) {{
+        network.focus(l3Node.id, {{ scale: 1.2, animation: true }});
+      }}
+    }});
 
     // Focus mode
     network.on("click", function (params) {{
@@ -281,6 +343,24 @@ class HtmlGraphExporter:
       document.getElementById("filter-kind").value = "";
       updateNetwork();
       network.fit();
+    }});
+    
+    document.getElementById("arch-mode").addEventListener("click", () => {{
+      showL0 = false;
+      showL1 = false;
+      showL2 = true;
+      showL3 = true;
+      document.getElementById("show-l0").checked = false;
+      document.getElementById("show-l1").checked = false;
+      document.getElementById("show-l2").checked = true;
+      document.getElementById("show-l3").checked = true;
+      updateNetwork();
+      const l3Node = rawNodes.find(n => n.layer === "L3");
+      if (l3Node) {{
+        network.focus(l3Node.id, {{ scale: 1.5, animation: true }});
+      }} else {{
+        network.fit();
+      }}
     }});
   </script>
 </body>
