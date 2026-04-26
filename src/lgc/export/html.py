@@ -49,11 +49,38 @@ class HtmlGraphExporter:
                 f"support_node_ids: {json.dumps(node.get('support_node_ids', []))}",
             ]
         )
+        
+        importance = 0.0
+        if isinstance(metadata, dict):
+            try:
+                importance = float(metadata.get("importance_score", 0.0))
+            except (ValueError, TypeError):
+                importance = 0.0
+
+        if layer == "L3":
+            base_size = 30
+            mass = 10
+        elif layer == "L2":
+            base_size = 20
+            mass = 5
+        elif layer == "L1":
+            base_size = 15
+            mass = 2
+        else:
+            base_size = 8
+            mass = 1
+
+        size = base_size + (importance * 10)
+
         return {
             "id": node["id"],
             "label": str(node.get("label", node["id"]))[:80],
             "title": html.escape(title),
             "color": LAYER_COLORS.get(layer, "#6b7280"),
+            "layer": layer,
+            "kind": metadata.get("kind", "") if isinstance(metadata, dict) else "",
+            "size": size,
+            "mass": mass,
         }
 
     def _edge_to_vis(self, edge: dict) -> dict:
@@ -80,29 +107,137 @@ class HtmlGraphExporter:
   <title>Layered Graph Compiler</title>
   <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
   <style>
-    body {{ margin: 0; font-family: Segoe UI, sans-serif; background: #f8fafc; color: #111827; }}
-    #graph {{ width: 100vw; height: 92vh; border-top: 1px solid #d1d5db; }}
-    .legend {{ display: flex; gap: 16px; align-items: center; padding: 12px 16px; font-size: 14px; }}
-    .swatch {{ display: inline-block; width: 12px; height: 12px; margin-right: 6px; vertical-align: -1px; }}
+    body {{ margin: 0; font-family: Segoe UI, sans-serif; background: #f8fafc; color: #111827; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }}
+    .controls {{ padding: 12px 24px; background: white; border-bottom: 1px solid #d1d5db; display: flex; gap: 24px; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); z-index: 10; }}
+    .controls label {{ font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-weight: 500; }}
+    .controls-group {{ display: flex; gap: 16px; align-items: center; border-right: 1px solid #e5e7eb; padding-right: 24px; }}
+    input[type=text] {{ padding: 6px 12px; border: 1px solid #d1d5db; border-radius: 6px; width: 250px; font-size: 14px; }}
+    button {{ padding: 6px 16px; cursor: pointer; background: #2563eb; color: white; border: none; border-radius: 6px; font-weight: 500; transition: background 0.2s; }}
+    button:hover {{ background: #1d4ed8; }}
+    .swatch {{ display: inline-block; width: 14px; height: 14px; border-radius: 3px; }}
+    #graph {{ flex: 1; width: 100vw; }}
   </style>
 </head>
 <body>
-  <div class="legend">
-    <strong>Layer legend</strong>
-    <span><i class="swatch" style="background:{LAYER_COLORS['L0']}"></i>L0</span>
-    <span><i class="swatch" style="background:{LAYER_COLORS['L1']}"></i>L1</span>
-    <span><i class="swatch" style="background:{LAYER_COLORS['L2']}"></i>L2</span>
-    <span><i class="swatch" style="background:{LAYER_COLORS['L3']}"></i>L3</span>
+  <div class="controls">
+    <div class="controls-group">
+      <strong>Layers</strong>
+      <label><input type="checkbox" id="show-l0"><i class="swatch" style="background:{LAYER_COLORS['L0']}"></i> L0</label>
+      <label><input type="checkbox" id="show-l1" checked><i class="swatch" style="background:{LAYER_COLORS['L1']}"></i> L1</label>
+      <label><input type="checkbox" id="show-l2" checked><i class="swatch" style="background:{LAYER_COLORS['L2']}"></i> L2</label>
+      <label><input type="checkbox" id="show-l3" checked><i class="swatch" style="background:{LAYER_COLORS['L3']}"></i> L3</label>
+    </div>
+    <div class="controls-group">
+      <select id="filter-kind">
+        <option value="">All Types</option>
+        <option value="function">Function</option>
+        <option value="class">Class</option>
+        <option value="module">File/Module</option>
+      </select>
+    </div>
+    <div class="controls-group" style="border: none;">
+      <input type="text" id="search" placeholder="Search nodes...">
+      <button id="reset-focus">Reset View</button>
+    </div>
   </div>
   <div id="graph"></div>
   <script>
-    const nodes = new vis.DataSet({json.dumps(vis_nodes)});
-    const edges = new vis.DataSet({json.dumps(vis_edges)});
-    new vis.Network(document.getElementById("graph"), {{ nodes, edges }}, {{
-      nodes: {{ shape: "dot", size: 12, font: {{ size: 14 }} }},
-      edges: {{ font: {{ size: 10, align: "middle" }}, smooth: false }},
-      physics: {{ enabled: true, stabilization: false }},
+    const rawNodes = new vis.DataSet({json.dumps(vis_nodes)});
+    const rawEdges = new vis.DataSet({json.dumps(vis_edges)});
+    
+    let showL0 = false;
+    let showL1 = true;
+    let showL2 = true;
+    let showL3 = true;
+    let searchQuery = "";
+    let filterKind = "";
+    let focusNodeId = null;
+    let focusConnectedNodeIds = new Set();
+    
+    const nodesView = new vis.DataView(rawNodes, {{
+      filter: function (item) {{
+        if (item.layer === "L0" && !showL0) return false;
+        if (item.layer === "L1" && !showL1) return false;
+        if (item.layer === "L2" && !showL2) return false;
+        if (item.layer === "L3" && !showL3) return false;
+        
+        if (filterKind && item.kind && item.kind !== filterKind) return false;
+        
+        if (searchQuery && !item.label.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+        
+        if (focusNodeId !== null) {{
+          if (item.id !== focusNodeId && !focusConnectedNodeIds.has(item.id)) return false;
+        }}
+        return true;
+      }}
+    }});
+
+    const edgesView = new vis.DataView(rawEdges, {{
+      filter: function (item) {{
+        if (focusNodeId !== null) {{
+          if (item.from !== focusNodeId && item.to !== focusNodeId) return false;
+        }}
+        return true;
+      }}
+    }});
+
+    const container = document.getElementById("graph");
+    const data = {{ nodes: nodesView, edges: edgesView }};
+    const options = {{
+      nodes: {{ shape: "dot", font: {{ size: 14 }} }},
+      edges: {{ font: {{ size: 10, align: "middle" }}, smooth: false, color: {{ opacity: 0.5 }} }},
+      physics: {{ 
+        enabled: true, 
+        solver: 'forceAtlas2Based',
+        forceAtlas2Based: {{ gravitationalConstant: -50, centralGravity: 0.01, springLength: 100, damping: 0.4 }},
+        stabilization: {{ iterations: 50 }}
+      }},
       layout: {{ improvedLayout: false }}
+    }};
+    
+    const network = new vis.Network(container, data, options);
+
+    // Focus mode
+    network.on("click", function (params) {{
+      if (params.nodes.length > 0) {{
+        focusNodeId = params.nodes[0];
+        focusConnectedNodeIds = new Set(network.getConnectedNodes(focusNodeId));
+        nodesView.refresh();
+        edgesView.refresh();
+      }} else {{
+        focusNodeId = null;
+        focusConnectedNodeIds.clear();
+        nodesView.refresh();
+        edgesView.refresh();
+      }}
+    }});
+
+    // Controls
+    document.getElementById("show-l0").addEventListener("change", (e) => {{ showL0 = e.target.checked; nodesView.refresh(); }});
+    document.getElementById("show-l1").addEventListener("change", (e) => {{ showL1 = e.target.checked; nodesView.refresh(); }});
+    document.getElementById("show-l2").addEventListener("change", (e) => {{ showL2 = e.target.checked; nodesView.refresh(); }});
+    document.getElementById("show-l3").addEventListener("change", (e) => {{ showL3 = e.target.checked; nodesView.refresh(); }});
+    
+    document.getElementById("filter-kind").addEventListener("change", (e) => {{
+      filterKind = e.target.value;
+      nodesView.refresh();
+    }});
+    
+    document.getElementById("search").addEventListener("input", (e) => {{
+      searchQuery = e.target.value;
+      nodesView.refresh();
+    }});
+    
+    document.getElementById("reset-focus").addEventListener("click", () => {{
+      focusNodeId = null;
+      focusConnectedNodeIds.clear();
+      searchQuery = "";
+      filterKind = "";
+      document.getElementById("search").value = "";
+      document.getElementById("filter-kind").value = "";
+      nodesView.refresh();
+      edgesView.refresh();
+      network.fit();
     }});
   </script>
 </body>
