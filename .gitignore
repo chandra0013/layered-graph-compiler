@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+artifact_manifest.jsonl
+graph_l0.json
+nodes_l0.json
+edges_l0.json
+nodes_l1.json
+nodes_l2.json
+nodes_l3.json
+evidence_packet.json
+lgc-out/

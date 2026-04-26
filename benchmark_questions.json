@@ -1,0 +1,177 @@
+[
+  {
+    "question": "where is MarkdownRenderer defined",
+    "expected_nodes": ["render.py", "MarkdownRenderer"],
+    "expected_layers": [],
+    "type": "implementation",
+    "difficulty": "easy"
+  },
+  {
+    "question": "which file contains ArtifactPaths",
+    "expected_nodes": ["paths.py", "ArtifactPaths"],
+    "expected_layers": [],
+    "type": "implementation",
+    "difficulty": "easy"
+  },
+  {
+    "question": "where is classify_query implemented",
+    "expected_nodes": ["classify.py", "classify_query"],
+    "expected_layers": [],
+    "type": "implementation",
+    "difficulty": "easy"
+  },
+  {
+    "question": "find the ProvenanceGuard class",
+    "expected_nodes": ["provenance_guard.py", "ProvenanceGuard"],
+    "expected_layers": [],
+    "type": "implementation",
+    "difficulty": "easy"
+  },
+  {
+    "question": "where is estimate_tokens defined",
+    "expected_nodes": ["tokens.py", "estimate_tokens"],
+    "expected_layers": [],
+    "type": "implementation",
+    "difficulty": "easy"
+  },
+  {
+    "question": "which file has the BenchmarkQuestion model",
+    "expected_nodes": ["questions.py", "BenchmarkQuestion"],
+    "expected_layers": [],
+    "type": "implementation",
+    "difficulty": "easy"
+  },
+  {
+    "question": "where is PythonAstExtractor implemented",
+    "expected_nodes": ["python_ast.py", "PythonAstExtractor"],
+    "expected_layers": [],
+    "type": "implementation",
+    "difficulty": "easy"
+  },
+  {
+    "question": "find the HtmlGraphExporter class",
+    "expected_nodes": ["html.py", "HtmlGraphExporter"],
+    "expected_layers": [],
+    "type": "implementation",
+    "difficulty": "easy"
+  },
+  {
+    "question": "how does query routing work",
+    "expected_nodes": ["route.py", "classify.py", "route_query"],
+    "expected_layers": [],
+    "type": "flow",
+    "difficulty": "medium"
+  },
+  {
+    "question": "what validation guards exist in the system",
+    "expected_nodes": ["provenance_guard.py", "compression_guard.py"],
+    "expected_layers": [],
+    "type": "architecture",
+    "difficulty": "medium"
+  },
+  {
+    "question": "describe the L1 aggregation process",
+    "expected_nodes": ["l1_aggregate.py", "aggregate_l1_file_summaries"],
+    "expected_layers": [],
+    "type": "architecture",
+    "difficulty": "medium"
+  },
+  {
+    "question": "how are evidence packets built",
+    "expected_nodes": ["evidence_packet.py", "build_evidence_packet"],
+    "expected_layers": [],
+    "type": "implementation",
+    "difficulty": "medium"
+  },
+  {
+    "question": "what does the ingest module do",
+    "expected_nodes": ["manifest.py", "detect.py", "ignore.py"],
+    "expected_layers": [],
+    "type": "architecture",
+    "difficulty": "medium"
+  },
+  {
+    "question": "how does the benchmark system measure tokens",
+    "expected_nodes": ["tokens.py", "run_token_benchmark"],
+    "expected_layers": [],
+    "type": "implementation",
+    "difficulty": "medium"
+  },
+  {
+    "question": "describe the graph layer hierarchy",
+    "expected_nodes": ["enums.py", "Layer"],
+    "expected_layers": ["L3", "L2"],
+    "type": "architecture",
+    "difficulty": "medium"
+  },
+  {
+    "question": "how does path-based evidence selection work",
+    "expected_nodes": ["path_select.py", "select_path_evidence"],
+    "expected_layers": [],
+    "type": "implementation",
+    "difficulty": "medium"
+  },
+  {
+    "question": "what Pydantic schemas define the domain model",
+    "expected_nodes": ["schemas.py", "Node", "Edge"],
+    "expected_layers": [],
+    "type": "architecture",
+    "difficulty": "medium"
+  },
+  {
+    "question": "trace the full pipeline from scan to evidence packet",
+    "expected_nodes": ["pipeline.py", "scan_project", "extract_project", "build_project", "query_project"],
+    "expected_layers": [],
+    "type": "flow",
+    "difficulty": "hard"
+  },
+  {
+    "question": "how does importance scoring affect query results",
+    "expected_nodes": ["importance.py", "annotate_importance", "route.py"],
+    "expected_layers": [],
+    "type": "flow",
+    "difficulty": "hard"
+  },
+  {
+    "question": "describe all compression mechanisms in the system",
+    "expected_nodes": ["compression_guard.py", "prune.py", "evidence_packet.py"],
+    "expected_layers": ["L3", "L2"],
+    "type": "architecture",
+    "difficulty": "hard"
+  },
+  {
+    "question": "how does the system enforce provenance from L0 to L3",
+    "expected_nodes": ["provenance_guard.py", "l1_aggregate.py", "l2_aggregate.py", "l3_overview.py"],
+    "expected_layers": [],
+    "type": "architecture",
+    "difficulty": "hard"
+  },
+  {
+    "question": "explain how community detection works in L2 aggregation",
+    "expected_nodes": ["l2_aggregate.py", "aggregate_l2_communities"],
+    "expected_layers": ["L2"],
+    "type": "architecture",
+    "difficulty": "hard"
+  },
+  {
+    "question": "describe the full query classification and routing pipeline",
+    "expected_nodes": ["classify.py", "route.py", "path_select.py", "evidence_packet.py"],
+    "expected_layers": [],
+    "type": "flow",
+    "difficulty": "hard"
+  },
+  {
+    "question": "how does the system produce the HTML visualization",
+    "expected_nodes": ["html.py", "HtmlGraphExporter"],
+    "expected_layers": [],
+    "type": "implementation",
+    "difficulty": "hard"
+  },
+  {
+    "question": "what is the relationship between token pruning and evidence packet construction",
+    "expected_nodes": ["prune.py", "strict_prune", "evidence_packet.py", "build_evidence_packet"],
+    "expected_layers": [],
+    "type": "architecture",
+    "difficulty": "hard"
+  }
+]
